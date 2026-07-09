@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@theme {
+    --color-chalkboard: #1e2b24;
+    --color-chalkboard-light: #263b31;
+    --color-chalk: #f2f0e6;
+    --color-chalk-yellow: #e8c468;
+    --color-chalk-teal: #7fb69e;
+    --color-chalk-dust: rgba(242, 240, 230, 0.15);
+    --font-display: 'Kalam', cursive;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+}
+
+.chalk-circle {
+    stroke-dasharray: 140;
+    stroke-dashoffset: 140;
+    animation: draw-circle 0.6s ease-out forwards;
+}
+
+@keyframes draw-circle {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
