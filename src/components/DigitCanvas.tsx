@@ -4,6 +4,7 @@ export interface DigitCanvasHandle {
   clear: () => void;
   isEmpty: () => boolean;
   getImageDataUrl: () => string;
+  toBlob: () => Promise<Blob>;
 }
 
 const CANVAS_SIZE = 280;
@@ -87,6 +88,13 @@ const DigitCanvas = forwardRef<DigitCanvasHandle>((_props, ref) => {
     },
     isEmpty: () => !hasDrawn.current,
     getImageDataUrl: () => canvasRef.current!.toDataURL('image/png'),
+    toBlob: () =>
+      new Promise<Blob>((resolve, reject) => {
+        canvasRef.current!.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Could not read the canvas as an image.'));
+        }, 'image/png');
+      }),
   }));
 
   return (
