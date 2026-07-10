@@ -4,58 +4,66 @@ import PredictionScoreboard from './components/PredictionScoreboard';
 import { predictDigit } from './api/predictDigit';
 import { PredictionResult } from './types';
 import './index.css';
+
 export default function App() {
   const canvasRef = useRef<DigitCanvasHandle>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-const [inputMode, setInputMode] = useState<'draw' | 'upload'>('draw');
-const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-const fileInputRef = useRef<HTMLInputElement>(null);
-const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
 
-  const reader = new FileReader();
+  // Keep the raw File (it's already a Blob) instead of a base64 string,
+  // so we can hand it straight to predictDigit(). previewUrl is only for
+  // showing a thumbnail in the UI.
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  reader.onload = () => {
-    setUploadedImage(reader.result as string);
-    setResult(null);
-    setError(null);
+  const resetUpload = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setUploadedFile(null);
+    setPreviewUrl(null);
   };
 
-  reader.readAsDataURL(file);
-};
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setUploadedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setResult(null);
+    setError(null);
+    canvasRef.current?.clear(); // uploading replaces whatever was drawn
+  };
+
   const handlePredict = async () => {
-  const canvas = canvasRef.current;
+    const canvas = canvasRef.current;
+    if (!uploadedFile && (!canvas || canvas.isEmpty())) {
+      setError('draw a digit or upload an image first.');
+      return;
+    }
 
-  if (!uploadedImage && (!canvas || canvas.isEmpty())) {
-    setError("Draw a digit or upload an image first.");
-    return;
-  }
+    setError(null);
+    setIsLoading(true);
+    try {
+      const imageBlob = uploadedFile ?? (await canvas!.toBlob());
+      const prediction = await predictDigit(imageBlob);
+      setResult(prediction);
+    } catch {
+      setError("couldn't reach the model. try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  setError(null);
-  setIsLoading(true);
-
-  try {
-    const image = uploadedImage
-      ? uploadedImage
-      : canvas!.getImageDataUrl();
-
-    const prediction = await predictDigit(image);
-    setResult(prediction);
-  } catch {
-    setError("Couldn't reach the model. Try again.");
-  } finally {
-    setIsLoading(false);
-  }
-};
   const handleClear = () => {
-  canvasRef.current?.clear();
-  setUploadedImage(null);
-  setResult(null);
-  setError(null);
-};
+    canvasRef.current?.clear();
+    resetUpload();
+    setResult(null);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   return (
     <div className="min-h-screen bg-chalkboard flex items-center justify-center p-6">
@@ -69,13 +77,30 @@ const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 
         <div className="grid md:grid-cols-2 gap-6">
           <div className="flex flex-col items-center gap-4">
-            <DigitCanvas ref={canvasRef} />
-<button
-    onClick={() => fileInputRef.current?.click()}
-    className="w-70 font-body text-sm text-chalk border border-chalk-dust rounded-md py-2 hover:bg-chalkboard-light transition-colors"
-  >
-    Upload Image
-  </button>
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Uploaded digit preview"
+                className="w-full max-w-70 aspect-square object-contain rounded-md border-2 border-dashed border-chalk-dust bg-chalkboard"
+              />
+            ) : (
+              <DigitCanvas ref={canvasRef} />
+            )}
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full max-w-70 font-body text-sm text-chalk border border-chalk-dust rounded-md py-2 hover:bg-chalkboard-light transition-colors"
+            >
+              upload image
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleUpload}
+              className="hidden"
+            />
+
             <div className="flex gap-3 w-full max-w-70">
               <button
                 onClick={handleClear}
@@ -83,15 +108,6 @@ const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
               >
                 clear
               </button>
-             <input
-    ref={fileInputRef}
-    type="file"
-    accept="image/*"
-    onChange={handleUpload}
-    className="hidden"
-  />
-
-  
               <button
                 onClick={handlePredict}
                 disabled={isLoading}
