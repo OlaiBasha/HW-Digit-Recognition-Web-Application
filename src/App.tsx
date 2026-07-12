@@ -1,15 +1,15 @@
 import { useRef, useState } from 'react';
 import DigitCanvas, { DigitCanvasHandle } from './components/DigitCanvas';
 import PredictionScoreboard from './components/PredictionScoreboard';
-import { predictDigit } from './api/predictDigit';
-import { PredictionResult } from './types';
+import { predictMultiDigit } from './api/predictDigit';
+import { MultiDigitResult } from './types';
 import './index.css';
 
 export default function App() {
   const canvasRef = useRef<DigitCanvasHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [result, setResult] = useState<PredictionResult | null>(null);
+  const [result, setResult] = useState<MultiDigitResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +48,7 @@ export default function App() {
     setIsLoading(true);
     try {
       const imageBlob = uploadedFile ?? (await canvas!.toBlob());
-      const prediction = await predictDigit(imageBlob);
+      const prediction = await predictMultiDigit(imageBlob);
       setResult(prediction);
     } catch {
       setError("couldn't reach the model. try again.");

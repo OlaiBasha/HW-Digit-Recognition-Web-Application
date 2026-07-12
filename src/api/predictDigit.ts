@@ -1,35 +1,40 @@
-import { PredictionResult } from '../types';
+import { MultiDigitResult } from '../types';
 
 const API_URL = import.meta.env.VITE_PREDICT_API_URL as string | undefined;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true' || !API_URL;
 
-/** Raw shape returned by the FastAPI backend (api.py). */
-interface BackendPredictionResponse {
-  digit: number;
-  confidence: number;
-  probabilities: Record<string, number>; // e.g. { "0": 0.01, "1": 0.0, ... "9": 0.9 }
+// The multi-digit endpoint lives next to the single-digit one on the same
+// backend, e.g. https://host/predict -> https://host/predict-multi
+const MULTI_API_URL = API_URL ? API_URL.replace(/\/predict\/?$/, '/predict-multi') : undefined;
+
+/** Raw shape returned by the FastAPI backend's /predict-multi (api.py). */
+interface BackendMultiPredictionResponse {
+  digits: { digit: number; confidence: number }[];
+  number: string;
 }
 
 /**
- * Sends the drawn digit to the backend model and returns the prediction.
+ * Sends a drawn/uploaded image (containing one or more digits side by side,
+ * e.g. a two-digit number) to the backend and returns each digit plus the
+ * combined number.
  *
- * Backend contract (ml_backend/api.py, confirmed with the teammate):
- *   POST {VITE_PREDICT_API_URL}   e.g. http://localhost:8000/predict
- *   body:     multipart/form-data, field name "file" = PNG blob from the canvas
- *   response: { digit, confidence, probabilities: { "0": num, ..., "9": num } }
+ * Backend contract (ml_backend/api.py, /predict-multi):
+ *   POST {MULTI_API_URL}   e.g. http://localhost:8000/predict-multi
+ *   body:     multipart/form-data, field name "file" = PNG blob
+ *   response: { digits: [{ digit, confidence }, ...], number: "42" }
  *
  * Until the real endpoint is reachable, set VITE_USE_MOCK_API=true (or leave
  * VITE_PREDICT_API_URL unset) in .env to get randomized mock predictions.
  */
-export async function predictDigit(imageBlob: Blob): Promise<PredictionResult> {
-  if (USE_MOCK) {
-    return mockPredict();
+export async function predictMultiDigit(imageBlob: Blob): Promise<MultiDigitResult> {
+  if (USE_MOCK || !MULTI_API_URL) {
+    return mockPredictMulti();
   }
 
   const formData = new FormData();
-  formData.append('file', imageBlob, 'digit.png');
+  formData.append('file', imageBlob, 'digits.png');
 
-  const response = await fetch(API_URL as string, {
+  const response = await fetch(MULTI_API_URL, {
     method: 'POST',
     body: formData,
   });
@@ -38,23 +43,19 @@ export async function predictDigit(imageBlob: Blob): Promise<PredictionResult> {
     throw new Error(`Prediction request failed with status ${response.status}`);
   }
 
-  const data = (await response.json()) as BackendPredictionResponse;
-
-  // Backend sends probabilities as an object keyed "0".."9" — convert to an
-  // ordered array (index = digit) so the rest of the app can stay simple.
-  const probabilities = Array.from({ length: 10 }, (_, digit) => data.probabilities[String(digit)] ?? 0);
-
-  return { digit: data.digit, confidence: data.confidence, probabilities };
+  const data = (await response.json()) as BackendMultiPredictionResponse;
+  return { digits: data.digits, number: data.number };
 }
 
-function mockPredict(): Promise<PredictionResult> {
+function mockPredictMulti(): Promise<MultiDigitResult> {
   return new Promise((resolve) => {
     setTimeout(() => {
-      const raw = Array.from({ length: 10 }, () => Math.random() ** 2);
-      const sum = raw.reduce((a, b) => a + b, 0);
-      const probabilities = raw.map((p) => p / sum);
-      const digit = probabilities.indexOf(Math.max(...probabilities));
-      resolve({ digit, confidence: probabilities[digit], probabilities });
+      const digitCount = 2;
+      const digits = Array.from({ length: digitCount }, () => ({
+        digit: Math.floor(Math.random() * 10),
+        confidence: 0.7 + Math.random() * 0.3,
+      }));
+      resolve({ digits, number: digits.map((d) => d.digit).join('') });
     }, 600);
   });
 }
